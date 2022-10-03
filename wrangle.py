@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import pandas as pd
+import seaborn as sns
 import statsmodels.api as sm
 from scipy import stats
 from sklearn.model_selection import train_test_split
@@ -81,11 +82,10 @@ def tb_narrow(df):
     '''
     Takes in the Dataframe,
     Finds the Region with the Highest Estimated Cases (SEA for this Dataset),
+    Returns Dataset.
     '''
     df = df[df.region == list(df.region[df.estimated_cases == df.estimated_cases.max()])[0]]
     df = df.drop(columns=["region"])
-    df = df[df.country == "Myanmar"]
-    del df['country']
     return df
 
 def pop_to_tb(df):
@@ -123,8 +123,65 @@ def wrangle_tb():
     df = tb_difference(pop_to_tb(tb_narrow(tb_combine(tb_clean(tb_get())))))
     return df
 
+# ======== Visualisations ==========
+
+def hist_col(df):
+    sns.histplot(data= df, x='estimated_total_pop')
+    plt.show()
+    sns.histplot(data=df, x= 'estimated_cases')
+    plt.show()
+    sns.histplot(data=df, x='estimated_new_cases')
+    plt.show()
+    sns.histplot(data=df, x='estimated_deaths')
+    plt.show()
+    sns.histplot(data=df, x='pop_to_tb')
+    plt.show()
+
+def hist_est(df):
+    sns.histplot(data=df, x= 'estimated_cases', color="yellow")
+    sns.histplot(data=df, x='estimated_new_cases', color="green")
+    sns.histplot(data=df, x='estimated_deaths', color = "red")
+    plt.xlabel("Cases (in Millions)")
+    plt.title("Existing Cases, New Cases, Deaths (1990-2013)")
+    plt.show()
+
+def hist_est2(df):
+    sns.histplot(data=df, x= 'estimated_cases', color="yellow")
+    sns.histplot(data=df, x='estimated_new_cases', color="green")
+    sns.histplot(data=df, x='estimated_deaths', color = "red")
+    plt.xlabel("Cases")
+    plt.title("Existing Cases, New Cases, Deaths (1990-2013)")
+    plt.show()
+
+def barplots(df):
+    fig, ax = plt.subplots(figsize=(12, 6))
+    sns.barplot(x=df.country, y=df.pop_to_tb, ax=ax)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, horizontalalignment='right')
+    plt.show()
+
+def boxplots(df):
+    fig, ax = plt.subplots(figsize=(12, 6))
+    sns.boxplot(x=df.country, y=df.pop_to_tb, ax=ax)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, horizontalalignment='right')
+    plt.show()
+
+def violin(df):
+    fig, ax = plt.subplots(figsize=(15, 7))
+    sns.violinplot(x=df.country, y=df.pop_to_tb, ax=ax)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, horizontalalignment='right')
+    plt.show()
+
 
 # ======== For Time Series =========
+
+def wrangle_time():
+    df = (tb_combine(tb_clean(tb_get())))
+    df = df[df.region == list(df.region[df.estimated_cases == df.estimated_cases.max()])[0]]
+    df = df.drop(columns=["region"])
+    df = df[df.country == "Myanmar"]
+    del df['country']
+    df = year_to_dt(tb_difference(pop_to_tb(df)))
+    return df
 
 def year_to_dt(df):
     df['year'] = pd.to_datetime(df['year'], format='%Y')
@@ -297,6 +354,8 @@ Ha: The mean of estimated cases from 1990 to 1995 is not equal to the mean of es
         print("We reject the Null Hypothesis")
     else:
         print("We fail to reject the Null Hypothesis")
+    print("")
+    print("")
     stat, p = stats.mannwhitneyu(y_low, y_high, alternative='greater')
     print('''H0: The mean of estimated cases from 1990 to 1995 is less than or equal to the mean of estimated cases from 1996 to 2001.
 Ha: The mean of estimated cases from 1990 to 1995 is greater than the mean of estimated cases from 1996 to 2001.''')
@@ -305,6 +364,8 @@ Ha: The mean of estimated cases from 1990 to 1995 is greater than the mean of es
         print("We reject the Null Hypothesis")
     else:
         print("We fail to reject the Null Hypothesis")
+    print("")
+    print("")
     stat, p = stats.mannwhitneyu(y_low, y_high, alternative='less')
     print('''H0: The mean of estimated cases from 1990 to 1995 is greater than or equal to the mean of estimated cases from 1996 to 2001.
 Ha: The mean of estimated cases from 1990 to 1995 is less than to the mean of estimated cases from 1996 to 2001.''')
@@ -313,6 +374,10 @@ Ha: The mean of estimated cases from 1990 to 1995 is less than to the mean of es
         print("We reject the Null Hypothesis")
     else:
         print("We fail to reject the Null Hypothesis")
+
+def stats_tests(train):
+    y_low, y_high = stats_start(train)
+    mann(y_low, y_high)
 
 # ======== Modeling =========
 
@@ -478,7 +543,7 @@ def best_rmse(eval_df, train):
     y = eval_df['rmse']
     plt.figure(figsize=(12, 6))
     sns.barplot(x, y)
-    plt.title(col)
+    plt.title("Predicted Cases")
     plt.ylabel('RMSE')
     plt.xticks(rotation=45)
     plt.show()
