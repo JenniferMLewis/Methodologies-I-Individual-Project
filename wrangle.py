@@ -1,6 +1,7 @@
-from symbol import tfpdef
 import pandas as pd
-
+import statsmodels.api as sm
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler, QuantileTransformer
 
 
 def tb_get():
@@ -75,9 +76,104 @@ def tb_narrow(df):
     Finds the Region with the Highest Estimated Cases (SEA for this Dataset),
     '''
     df = df[df.region == list(df.region[df.estimated_cases == df.estimated_cases.max()])[0]]
+    df = df.drop(columns=["region"])
+    df = df[df.country == "Myanmar"]
+    del df['country']
+    return df
+
+def pop_to_tb(df):
+    '''
+    Takes the Dataframe, 
+    Calculates how many people to 1 case of TB.
+     [So the Lower the Number, the More Prevelant TB is.
+     ex. 1 case for every 57 people vs. 1 case for every 202 people. 57 is the higher Prevelance.]
+    Returns the Dataframe with a new column of how many people to 1 case.
+     (Yes, Cases per 100k will give you the same result of prevelance, but the 1 in x is easier for me to digest, and really shows how common it might be.)
+    '''
+    df['pop_to_tb'] = round(df.estimated_total_pop / df.estimated_cases)
+    return df
+
+def tb_difference(df):
+    '''
+    Takes in the DataFrame,
+    Calculates the difference in current cases, new cases, and deaths between the current year and the previous recorded year, by region.
+    Returns the Dataframe with the three new columns for difference.
+    Fills the first row with 0 since there is no previous row to compare with, it's the baseline at 0.
+    '''
+    est_diff = df.estimated_cases.diff()
+    death_diff = df.estimated_deaths.diff()
+    new_diff = df.estimated_new_cases.diff()
+    df_est_diff = df.assign(case_difference = est_diff)
+    new_df = df_est_diff.assign(death_difference = death_diff)
+    df = new_df.assign(new_case_difference = new_diff)
+    df['case_difference'] = df.case_difference.fillna(0)
+    df['death_difference'] = df.death_difference.fillna(0)
+    df['new_case_difference'] = df.new_case_difference.fillna(0)
     return df
 
 
 def wrangle_tb():
-    df = tb_narrow(tb_combine(tb_clean(tb_get())))
+    df = tb_difference(pop_to_tb(tb_narrow(tb_combine(tb_clean(tb_get())))))
     return df
+
+
+# ======== For Time Series =========
+
+def year_to_dt(df):
+    df['year'] = pd.to_datetime(df['year'], format='%Y')
+    df = df.set_index('year').sort_index()
+    return df
+
+def time_split(df):
+    '''
+    Splits the Dataframe into 50%, 30% and 20% then plots them to show no gaps or overlapping
+    Returns the splits as Train, Validate and Test.
+    '''
+    train_size = int(len(df) * .5)
+    validate_size = int(len(df) * .3)
+    test_size = int(len(df) - train_size - validate_size)
+    validate_end_index = train_size + validate_size
+
+    # split into train, validation, test
+    train = df[: train_size]
+    validate = df[train_size : validate_end_index]
+    test = df[validate_end_index : ]
+    for col in train.columns:
+        plt.figure(figsize=(12,4))
+        plt.plot(train[col])
+        plt.plot(validate[col])
+        plt.plot(test[col])
+        plt.ylabel(col)
+        plt.show()
+    return train, validate, test
+
+
+# ========= For Linear Regression =========
+
+def df_split(df):
+    train_validate, test = train_test_split(df, test_size=.2, random_state=123)
+    train, validate = train_test_split(train_validate, test_size=.3, random_state=123)
+
+def df_xy_split(train, validate, test, target="estimated_cases"):
+    '''
+    Takes in train, validate, and test df, as well as target (default: "estimated_cases")
+    Splits them into X, y using target.
+    Returns X, y of train, validate, and test.
+    y sets returned as a proper DataFrame.
+    '''
+    X_train, y_train = train.drop(columns=target), train[target]
+    X_validate, y_validate = validate.drop(columns=target), validate[target]
+    X_test, y_test = test.drop(columns=target), test[target]
+    y_train = pd.DataFrame(y_train)
+    y_validate = pd.DataFrame(y_validate)
+    y_test = pd.DataFrame(y_test)
+    return X_train, y_train, X_validate, y_validate, X_test, y_test
+
+def scale(df, columns_for_scaling, scaler = MinMaxScaler()):
+    '''
+    Takes in df, columns to be scaled, and scaler (default: MinMaxScaler(); others can be used ie: StandardScaler(), RobustScaler(), QuantileTransformer())
+    Returns a copy of the df, scaled.
+    '''
+    scaled_df = df.copy()
+    scaled_df[columns_for_scaling] = scaler.fit_transform(df[columns_for_scaling])
+    return scaled_df
